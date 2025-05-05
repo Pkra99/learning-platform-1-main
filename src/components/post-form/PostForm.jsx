@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Button, Input, RTE, Select } from "..";
 import appwriteService from "../../appwrite/config";
@@ -20,15 +20,24 @@ export default function PostForm({ post }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [imageFile, setImageFile] = useState(null);
+    
+    // Debug user authentication state
+    useEffect(() => {
+        console.log("Current userData state:", userData);
+    }, [userData]);
 
     const submit = async (data) => {
         setLoading(true);
         setError("");
         
         try {
-            // Check if user is logged in
-            if (!userData) {
-                setError("You must be logged in to create a post");
+            // Debug authentication check
+            console.log("Authentication check - userData:", userData);
+            
+            // Check if user is logged in - modified check
+            if (!userData || !userData.$id) {
+                console.error("User authentication issue:", userData);
+                setError("Authentication error. Please try logging out and logging back in.");
                 setLoading(false);
                 return;
             }
@@ -85,6 +94,8 @@ export default function PostForm({ post }) {
 
                 if (file) {
                     const fileId = file.$id;
+                    console.log("Creating post with userId:", userData.$id);
+                    
                     const dbPost = await appwriteService.createPost({
                         title: data.title,
                         slug: data.slug,
@@ -107,7 +118,7 @@ export default function PostForm({ post }) {
             }
         } catch (error) {
             console.error("Error in post submission:", error);
-            setError("An error occurred while saving the post. Please try again.");
+            setError(`An error occurred: ${error.message || "Unknown error"}`);
         } finally {
             setLoading(false);
         }
@@ -229,7 +240,7 @@ export default function PostForm({ post }) {
                     </div>
                 )}
                 
-                {post && !imageFile && (
+                {post && !imageFile && post.featuredImage && (
                     <div className="w-full mb-4">
                         <img
                             src={appwriteService.getFilePreview(post.featuredImage)}

@@ -159,7 +159,8 @@ export class Service{
                     title,
                     description,
                     sections,
-                    content: description || "" // Use description as content or empty string
+                    content: description || "", // Use description as content or empty string
+                    averageRatingsString: "{}" // Initialize with empty stringified object
                 }
             );
             console.log("Course created:", response);
@@ -348,6 +349,9 @@ export class Service{
                 averageRatings[section] = sectionRatings[section].sum / sectionRatings[section].count;
             }
             
+            // Stringify the averageRatings object for storage
+            const averageRatingsString = JSON.stringify(averageRatings);
+            
             // Update the course document
             const courseCollectionId = conf.appwriteCourseCollectionId || conf.appwriteCoursesCollectionId;
             return await this.databases.updateDocument(
@@ -355,7 +359,7 @@ export class Service{
                 courseCollectionId,
                 courseId,
                 {
-                    averageRatings
+                    averageRatingsString: averageRatingsString
                 }
             );
         } catch (error) {

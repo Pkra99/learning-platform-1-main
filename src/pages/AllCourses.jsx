@@ -37,20 +37,20 @@ function AllCourses({ userId }) {
   // Fetch user ratings
   const fetchUserRatings = async () => {
     if (!userId) return;
-    
+
     try {
       setLoading(true);
       console.log("Fetching user ratings for user:", userId);
       console.log("Using collection ID:", conf.appwriteRatingCollectionId);
-      
+
       const response = await service.databases.listDocuments(
         conf.appwriteDatabaseId,
         conf.appwriteRatingCollectionId,
-        [Query.equal('userId', userId)]
+        [Query.equal("userId", userId)]
       );
-      
+
       console.log("User ratings response:", response);
-      
+
       if (response && response.documents) {
         const ratingsMap = response.documents.reduce((acc, rating) => {
           acc[`${rating.courseId}-${rating.section}`] = rating.rating;
@@ -112,18 +112,18 @@ function AllCourses({ userId }) {
       setLoading(true);
       // Get existing review text if any
       let existingComment = "";
-      
+
       try {
         const existingReviews = await service.databases.listDocuments(
           conf.appwriteDatabaseId,
           conf.appwriteRatingCollectionId,
           [
-            Query.equal('courseId', courseId),
-            Query.equal('userId', userId),
-            Query.equal('section', section)
+            Query.equal("courseId", courseId),
+            Query.equal("userId", userId),
+            Query.equal("section", section),
           ]
         );
-        
+
         if (existingReviews.documents.length > 0) {
           existingComment = existingReviews.documents[0].comment || "";
         }
@@ -131,21 +131,26 @@ function AllCourses({ userId }) {
         console.error("Error fetching existing review:", error);
         // Continue with empty comment if there's an error
       }
-      
-      console.log("Adding review with rating:", newRating, "comment:", existingComment);
-      
+
+      console.log(
+        "Adding review with rating:",
+        newRating,
+        "comment:",
+        existingComment
+      );
+
       // Use direct database operations if service.addReview is not working
       try {
         const existingReviews = await service.databases.listDocuments(
           conf.appwriteDatabaseId,
           conf.appwriteRatingCollectionId,
           [
-            Query.equal('courseId', courseId),
-            Query.equal('userId', userId),
-            Query.equal('section', section)
+            Query.equal("courseId", courseId),
+            Query.equal("userId", userId),
+            Query.equal("section", section),
           ]
         );
-        
+
         if (existingReviews.documents.length > 0) {
           // Update existing review
           await service.databases.updateDocument(
@@ -165,27 +170,26 @@ function AllCourses({ userId }) {
               courseId,
               section,
               rating: newRating,
-              comment: existingComment
+              comment: existingComment,
             }
           );
         }
-        
+
         // Update local state
-        setUserRatings(prev => ({
+        setUserRatings((prev) => ({
           ...prev,
-          [`${courseId}-${section}`]: newRating
+          [`${courseId}-${section}`]: newRating,
         }));
-        
+
         // Refresh course data and reviews
         fetchCourses();
         fetchReviews();
-        
       } catch (error) {
         console.error("Error saving rating:", error);
         alert("Failed to save your rating. Please try again.");
       }
     } catch (error) {
-      console.error('Error in rating process:', error);
+      console.error("Error in rating process:", error);
     } finally {
       setLoading(false);
     }
@@ -196,8 +200,11 @@ function AllCourses({ userId }) {
 
     try {
       setLoading(true);
-      const currentRating = userRatings[`${selectedCourseForReview.courseId}-${selectedCourseForReview.section}`] || 5;
-      
+      const currentRating =
+        userRatings[
+          `${selectedCourseForReview.courseId}-${selectedCourseForReview.section}`
+        ] || 5;
+
       await addReview(
         selectedCourseForReview.courseId,
         userId,
@@ -211,7 +218,7 @@ function AllCourses({ userId }) {
       fetchReviews();
       alert("Your review has been submitted successfully!");
     } catch (error) {
-      console.error('Error submitting review:', error);
+      console.error("Error submitting review:", error);
       alert("Failed to submit your review. Please try again.");
     } finally {
       setLoading(false);
@@ -220,16 +227,22 @@ function AllCourses({ userId }) {
 
   const addReview = async (courseId, userId, section, rating, comment = "") => {
     try {
-      console.log("Adding review:", { courseId, userId, section, rating, comment });
-      
+      console.log("Adding review:", {
+        courseId,
+        userId,
+        section,
+        rating,
+        comment,
+      });
+
       // Check if review exists
       const existingReviews = await service.databases.listDocuments(
         conf.appwriteDatabaseId,
         conf.appwriteRatingCollectionId,
         [
-          Query.equal('courseId', courseId),
-          Query.equal('userId', userId),
-          Query.equal('section', section)
+          Query.equal("courseId", courseId),
+          Query.equal("userId", userId),
+          Query.equal("section", section),
         ]
       );
 
@@ -253,11 +266,11 @@ function AllCourses({ userId }) {
             courseId,
             section,
             rating,
-            comment
+            comment,
           }
         );
       }
-      
+
       return response;
     } catch (error) {
       console.error("Error adding review:", error);

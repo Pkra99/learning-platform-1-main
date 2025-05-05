@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Button, Input, RTE, Select } from "..";
 import appwriteService from "../../appwrite/config";
@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 
 export default function PostForm({ post }) {
-    const { register, handleSubmit, watch, setValue, control, getValues } = useForm({
+    const { register, handleSubmit, watch, setValue, control, getValues, formState: { errors } } = useForm({
         defaultValues: {
             title: post?.title || "",
             slug: post?.$id || "",
@@ -17,35 +17,99 @@ export default function PostForm({ post }) {
 
     const navigate = useNavigate();
     const userData = useSelector((state) => state.auth.userData);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [imageFile, setImageFile] = useState(null);
 
     const submit = async (data) => {
-        if (post) {
-            const file = data.image[0] ? await appwriteService.uploadFile(data.image[0]) : null;
-
-            if (file) {
-                appwriteService.deleteFile(post.featuredImage);
+        setLoading(true);
+        setError("");
+        
+        try {
+            // Check if user is logged in
+            if (!userData) {
+                setError("You must be logged in to create a post");
+                setLoading(false);
+                return;
+            }
+            
+            // Validate required fields
+            if (!data.title || !data.slug || !data.content) {
+                setError("Title, slug, and content are required");
+                setLoading(false);
+                return;
             }
 
-            const dbPost = await appwriteService.updatePost(post.$id, {
-                ...data,
-                featuredImage: file ? file.$id : undefined,
-            });
+            if (post) {
+                // Update existing post
+                let featuredImageId = post.featuredImage;
+                
+                // If a new image was selected
+                if (data.image && data.image[0]) {
+                    const file = await appwriteService.uploadFile(data.image[0]);
+                    
+                    if (file) {
+                        // Delete old image if it exists
+                        if (post.featuredImage) {
+                            await appwriteService.deleteFile(post.featuredImage);
+                        }
+                        featuredImageId = file.$id;
+                    } else {
+                        setError("Failed to upload image");
+                        setLoading(false);
+                        return;
+                    }
+                }
 
-            if (dbPost) {
-                navigate(`/post/${dbPost.$id}`);
-            }
-        } else {
-            const file = await appwriteService.uploadFile(data.image[0]);
-
-            if (file) {
-                const fileId = file.$id;
-                data.featuredImage = fileId;
-                const dbPost = await appwriteService.createPost({ ...data, userId: userData.$id });
+                const dbPost = await appwriteService.updatePost(post.$id, {
+                    title: data.title,
+                    content: data.content,
+                    featuredImage: featuredImageId,
+                    status: data.status,
+                });
 
                 if (dbPost) {
                     navigate(`/post/${dbPost.$id}`);
+                } else {
+                    setError("Failed to update post");
+                }
+            } else {
+                // Create new post
+                if (!data.image || !data.image[0]) {
+                    setError("Featured image is required");
+                    setLoading(false);
+                    return;
+                }
+                
+                const file = await appwriteService.uploadFile(data.image[0]);
+
+                if (file) {
+                    const fileId = file.$id;
+                    const dbPost = await appwriteService.createPost({
+                        title: data.title,
+                        slug: data.slug,
+                        content: data.content,
+                        featuredImage: fileId,
+                        status: data.status,
+                        userId: userData.$id,
+                    });
+
+                    if (dbPost) {
+                        navigate(`/post/${dbPost.$id}`);
+                    } else {
+                        setError("Failed to create post");
+                        // Clean up the uploaded file if post creation fails
+                        await appwriteService.deleteFile(fileId);
+                    }
+                } else {
+                    setError("Failed to upload image");
                 }
             }
+        } catch (error) {
+            console.error("Error in post submission:", error);
+            setError("An error occurred while saving the post. Please try again.");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -72,23 +136,58 @@ export default function PostForm({ post }) {
 
     return (
         <form onSubmit={handleSubmit(submit)} className="flex flex-wrap">
+            {error && (
+                <div className="w-full mb-4 p-3 bg-red-100 text-red-700 rounded">
+                    {error}
+                </div>
+            )}
+            
             <div className="w-2/3 px-2">
                 <Input
                     label="Title :"
                     placeholder="Title"
                     className="mb-4"
-                    {...register("title", { required: true })}
+                    {...register("title", { 
+                        required: "Title is required",
+                        minLength: {
+                            value: 3,
+                            message: "Title must be at least 3 characters"
+                        }
+                    })}
                 />
+                {errors.title && (
+                    <p className="text-red-500 text-sm mt-1">{errors.title.message}</p>
+                )}
+                
                 <Input
                     label="Slug :"
                     placeholder="Slug"
                     className="mb-4"
-                    {...register("slug", { required: true })}
+                    {...register("slug", { 
+                        required: "Slug is required",
+                        pattern: {
+                            value: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+                            message: "Invalid slug format"
+                        }
+                    })}
                     onInput={(e) => {
                         setValue("slug", slugTransform(e.currentTarget.value), { shouldValidate: true });
                     }}
                 />
-                <RTE label="Content :" name="content" control={control} defaultValue={getValues("content")} />
+                {errors.slug && (
+                    <p className="text-red-500 text-sm mt-1">{errors.slug.message}</p>
+                )}
+                
+                <RTE 
+                    label="Content :" 
+                    name="content" 
+                    control={control} 
+                    defaultValue={getValues("content")}
+                    rules={{ required: "Content is required" }}
+                />
+                {errors.content && (
+                    <p className="text-red-500 text-sm mt-1">{errors.content.message}</p>
+                )}
             </div>
             <div className="w-1/3 px-2">
                 <Input
@@ -96,9 +195,41 @@ export default function PostForm({ post }) {
                     type="file"
                     className="mb-4"
                     accept="image/png, image/jpg, image/jpeg, image/gif"
-                    {...register("image", { required: !post })}
+                    {...register("image", { 
+                        required: !post ? "Featured image is required" : false,
+                        validate: {
+                            fileType: (value) => {
+                                if (!value || !value[0]) return true;
+                                const acceptedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+                                return acceptedTypes.includes(value[0].type) || "Invalid file type";
+                            },
+                            fileSize: (value) => {
+                                if (!value || !value[0]) return true;
+                                return value[0].size <= 5000000 || "File size must be less than 5MB";
+                            }
+                        }
+                    })}
+                    onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                            setImageFile(URL.createObjectURL(e.target.files[0]));
+                        }
+                    }}
                 />
-                {post && (
+                {errors.image && (
+                    <p className="text-red-500 text-sm mt-1">{errors.image.message}</p>
+                )}
+                
+                {imageFile && (
+                    <div className="w-full mb-4">
+                        <img
+                            src={imageFile}
+                            alt="Selected image"
+                            className="rounded-lg"
+                        />
+                    </div>
+                )}
+                
+                {post && !imageFile && (
                     <div className="w-full mb-4">
                         <img
                             src={appwriteService.getFilePreview(post.featuredImage)}
@@ -107,14 +238,24 @@ export default function PostForm({ post }) {
                         />
                     </div>
                 )}
+                
                 <Select
                     options={["active", "inactive"]}
                     label="Status"
                     className="mb-4"
-                    {...register("status", { required: true })}
+                    {...register("status", { required: "Status is required" })}
                 />
-                <Button type="submit" bgColor={post ? "bg-green-500" : undefined} className="w-full">
-                    {post ? "Update" : "Submit"}
+                {errors.status && (
+                    <p className="text-red-500 text-sm mt-1">{errors.status.message}</p>
+                )}
+                
+                <Button 
+                    type="submit" 
+                    bgColor={post ? "bg-green-500" : undefined} 
+                    className="w-full"
+                    disabled={loading}
+                >
+                    {loading ? "Saving..." : (post ? "Update" : "Submit")}
                 </Button>
             </div>
         </form>
